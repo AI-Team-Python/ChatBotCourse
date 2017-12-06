@@ -58,7 +58,7 @@ class MyLSTM(object):
                 for word in segments:
                     if word not in self.one_hot_word_vector_dict:
                         word_id = word_id_dict[word]
-                        print word, word_id
+                        print (word, word_id)
                         vector = np.zeros(self.one_hot_word_vectors_dim)
                         vector[word_id] = 1
                         self.one_hot_word_vector_dict[word] = vector
@@ -107,7 +107,7 @@ class MyLSTM(object):
                 pass
 
         input_file.close()
-        print "finish"
+        print ("finish")
 
     def next_batch(self):
         """获取训练样本"""
@@ -266,7 +266,7 @@ class MyLSTM(object):
                 sess.run(optimizer, feed_dict={x: train_XY, y: train_Y})
                 loss = sess.run(cost, feed_dict={x: train_XY, y: train_Y})
                 if i % 1 == 0 and step == 0:
-                    print 'i=%d, loss=%f' % (i, loss)
+                    print ('i=%d, loss=%f' % (i, loss))
 
         saver = tf.train.Saver()
         saver.save(sess, self.model_dir)
@@ -298,8 +298,8 @@ class MyLSTM(object):
             train_XY = XY[step:]
             train_Y = Y[step:]
             loss = sess.run(cost, feed_dict={x: train_XY, y: train_Y})
-            print sess.run(decoder_layer2_outputs, feed_dict={x: train_XY, y: train_Y})
-            print 'loss=%f' % loss
+            print (sess.run(decoder_layer2_outputs, feed_dict={x: train_XY, y: train_Y}))
+            print ('loss=%f' % loss)
 
     def predict(self):
         x = tf.placeholder("float", [None, self.max_seq_len * 2, self.word_vec_dim])
@@ -340,10 +340,10 @@ class MyLSTM(object):
         XY.append(xy)
         Y.append([np.zeros(self.one_hot_word_vectors_dim)] * self.max_seq_len)
         output_seq = sess.run(decoder_layer2_outputs, feed_dict={x: XY, y: Y})
-        print output_seq
+        print (output_seq)
         for vector in output_seq:
             word_id = np.argmax(vector, axis=0)
-            print self.word_id_word_dict[word_id]
+            print (self.word_id_word_dict[word_id])
 
 
 def main(op):
@@ -358,10 +358,10 @@ def main(op):
     elif op == 'test':
         lstm.test()
     else:
-        print 'Usage:'
+        print ('Usage:')
 
 if __name__ == '__main__':
     if len(sys.argv) == 2:
         main(sys.argv[1])
     else:
-        print 'Usage:'
+        print ('Usage:')
