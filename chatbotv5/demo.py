@@ -10,9 +10,9 @@ import jieba
 import random
 
 # 输入序列长度
-input_seq_len = 5
+input_seq_len = 15
 # 输出序列长度
-output_seq_len = 5
+output_seq_len = 15
 # 空值填充0
 PAD_ID = 0
 # 输出序列起始标记
@@ -20,16 +20,16 @@ GO_ID = 1
 # 结尾标记
 EOS_ID = 2
 # LSTM神经元size
-size = 8
+size = 28
 # 初始学习率
-init_learning_rate = 1
+init_learning_rate = 0.044
 # 在样本中出现频率超过这个值才会进入词表
-min_freq = 10
+min_freq = 6
 
 wordToken = word_token.WordToken()
 
 # 放在全局的位置，为了动态算出num_encoder_symbols和num_decoder_symbols
-max_token_id = wordToken.load_file_list(['./samples/question', './samples/answer'], min_freq)
+max_token_id = wordToken.load_file_list(['./samples/gossip'], min_freq)
 num_encoder_symbols = max_token_id + 5
 num_decoder_symbols = max_token_id + 5
 
@@ -47,22 +47,21 @@ def get_id_list_from(sentence):
 def get_train_set():
     global num_encoder_symbols, num_decoder_symbols
     train_set = []
-    with open('./samples/question', 'r') as question_file:
-        with open('./samples/answer', 'r') as answer_file:
-            while True:
-                question = question_file.readline()
-                answer = answer_file.readline()
-                if question and answer:
-                    question = question.strip()
-                    answer = answer.strip()
+    with open('./samples/gossip', 'r') as _file:
+        
+        while True:
+            sentence = _file.readline()
+            
+            if sentence and '|' in sentence:
+                question, answer = sentence.strip().split('|')[:2]
 
-                    question_id_list = get_id_list_from(question)
-                    answer_id_list = get_id_list_from(answer)
-                    if len(question_id_list) > 0 and len(answer_id_list) > 0:
-                        answer_id_list.append(EOS_ID)
-                        train_set.append([question_id_list, answer_id_list])
-                else:
-                    break
+                question_id_list = get_id_list_from(question)
+                answer_id_list = get_id_list_from(answer)
+                if len(question_id_list) > 0 and len(answer_id_list) > 0:
+                    answer_id_list.append(EOS_ID)
+                    train_set.append([question_id_list, answer_id_list])
+            elif not sentence:
+                break
     return train_set
 
 
@@ -91,9 +90,9 @@ def get_samples(train_set, batch_num):
     decoder_inputs = []
     target_weights = []
 
-    for length_idx in xrange(input_seq_len):
+    for length_idx in range(input_seq_len):
         encoder_inputs.append(np.array([encoder_input[length_idx] for encoder_input in raw_encoder_input], dtype=np.int32))
-    for length_idx in xrange(output_seq_len):
+    for length_idx in range(output_seq_len):
         decoder_inputs.append(np.array([decoder_input[length_idx] for decoder_input in raw_decoder_input], dtype=np.int32))
         target_weights.append(np.array([
             0.0 if length_idx == output_seq_len - 1 or decoder_input[length_idx] == PAD_ID else 1.0 for decoder_input in raw_decoder_input
@@ -118,22 +117,23 @@ def get_model(feed_previous=False):
     """
 
     learning_rate = tf.Variable(float(init_learning_rate), trainable=False, dtype=tf.float32)
-    learning_rate_decay_op = learning_rate.assign(learning_rate * 0.9)
+    learning_rate_decay_op = learning_rate.assign(learning_rate * 0.96)
 
     encoder_inputs = []
     decoder_inputs = []
     target_weights = []
-    for i in xrange(input_seq_len):
+    for i in range(input_seq_len):
         encoder_inputs.append(tf.placeholder(tf.int32, shape=[None], name="encoder{0}".format(i)))
-    for i in xrange(output_seq_len + 1):
+    for i in range(output_seq_len + 1):
         decoder_inputs.append(tf.placeholder(tf.int32, shape=[None], name="decoder{0}".format(i)))
-    for i in xrange(output_seq_len):
+    for i in range(output_seq_len):
         target_weights.append(tf.placeholder(tf.float32, shape=[None], name="weight{0}".format(i)))
 
     # decoder_inputs左移一个时序作为targets
-    targets = [decoder_inputs[i + 1] for i in xrange(output_seq_len)]
+    targets = [decoder_inputs[i + 1] for i in range(output_seq_len)]
 
     cell = tf.contrib.rnn.BasicLSTMCell(size)
+    cell = tf.contrib.rnn.MultiRNNCell([cell] * 3, state_is_tuple=True)
 
     # 这里输出的状态我们不需要
     outputs, _ = seq2seq.embedding_attention_seq2seq(
@@ -150,7 +150,7 @@ def get_model(feed_previous=False):
     # 计算加权交叉熵损失
     loss = seq2seq.sequence_loss(outputs, targets, target_weights)
     # 梯度下降优化器
-    opt = tf.train.GradientDescentOptimizer(learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate)
     # 优化目标：让loss最小化
     update = opt.apply_gradients(opt.compute_gradients(loss))
     # 模型持久化
@@ -175,20 +175,20 @@ def train():
 
         # 训练很多次迭代，每隔10次打印一次loss，可以看情况直接ctrl+c停止
         previous_losses = []
-        for step in xrange(20000):
-            sample_encoder_inputs, sample_decoder_inputs, sample_target_weights = get_samples(train_set, 1000)
+        for step in range(20000):
+            sample_encoder_inputs, sample_decoder_inputs, sample_target_weights = get_samples(train_set, 100)
             input_feed = {}
-            for l in xrange(input_seq_len):
+            for l in range(input_seq_len):
                 input_feed[encoder_inputs[l].name] = sample_encoder_inputs[l]
-            for l in xrange(output_seq_len):
+            for l in range(output_seq_len):
                 input_feed[decoder_inputs[l].name] = sample_decoder_inputs[l]
                 input_feed[target_weights[l].name] = sample_target_weights[l]
             input_feed[decoder_inputs[output_seq_len].name] = np.zeros([len(sample_decoder_inputs[0])], dtype=np.int32)
             [loss_ret, _] = sess.run([loss, update], input_feed)
             if step % 10 == 0:
-                print 'step=', step, 'loss=', loss_ret, 'learning_rate=', learning_rate.eval()
+                print ('step=', step, 'loss=', loss_ret, 'learning_rate=', learning_rate.eval())
 
-                if len(previous_losses) > 5 and loss_ret > max(previous_losses[-5:]):
+                if len(previous_losses) > 8 and loss_ret > max(previous_losses[-8:]):
                     sess.run(learning_rate_decay_op)
                 previous_losses.append(loss_ret)
 
@@ -213,9 +213,9 @@ def predict():
                 sample_encoder_inputs, sample_decoder_inputs, sample_target_weights = seq_to_encoder(' '.join([str(v) for v in input_id_list]))
 
                 input_feed = {}
-                for l in xrange(input_seq_len):
+                for l in range(input_seq_len):
                     input_feed[encoder_inputs[l].name] = sample_encoder_inputs[l]
-                for l in xrange(output_seq_len):
+                for l in range(output_seq_len):
                     input_feed[decoder_inputs[l].name] = sample_decoder_inputs[l]
                     input_feed[target_weights[l].name] = sample_target_weights[l]
                 input_feed[decoder_inputs[output_seq_len].name] = np.zeros([2], dtype=np.int32)
@@ -228,9 +228,9 @@ def predict():
                 if EOS_ID in outputs_seq:
                     outputs_seq = outputs_seq[:outputs_seq.index(EOS_ID)]
                 outputs_seq = [wordToken.id2word(v) for v in outputs_seq]
-                print " ".join(outputs_seq)
+                print (" ".join(outputs_seq))
             else:
-                print "WARN：词汇不在服务区"
+                print ("WARN：词汇不在服务区")
 
             sys.stdout.write("> ")
             sys.stdout.flush()

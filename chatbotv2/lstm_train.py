@@ -57,14 +57,17 @@ def init_word_id_dict():
 
     return (word_id_dict, max_word_id)
 
-
+# tf.unpack（A, axis）是一个解包函数。A是一个需要被解包的对象，axis是一个解包方式的定义，默认是零，如果是零，返回的结果就是按行解包。如果是1，就是按列解包。
+# 【注意：】tf1.0+已经将pack函数更名为stack函数,unpack函数对应更名为unstack函数.
 def sequence_loss(y_pred, y_true):
-    logits = tf.unpack(y_pred, axis=1)
-    targets = tf.unpack(y_true, axis=1)
+    logits = tf.unstack(y_pred, axis=1)
+    targets = tf.unstack(y_true, axis=1)
+    # tf.ones_like(tensor,dype=None,name=None)新建一个与给定的tensor类型大小一致的tensor,其所有元素为1
     weights = [tf.ones_like(yp, dtype=tf.float32) for yp in targets]
     return seq2seq.sequence_loss(logits, targets, weights)
 
 def accuracy(y_pred, y_true, x_in):
+    # tf.argmax就是返回最大的那个数值所在的下标,
     pred_idx = tf.to_int32(tf.argmax(y_pred, 2))
     return tf.reduce_mean(tf.cast(tf.equal(pred_idx, y_true), tf.float32), name='acc')
 
@@ -72,9 +75,9 @@ def create_model(max_word_id, is_test=False):
     GO_VALUE = max_word_id + 1
     network = tflearn.input_data(shape=[None, max_seq_len + max_seq_len], dtype=tf.int32, name="XY")
     encoder_inputs = tf.slice(network, [0, 0], [-1, max_seq_len], name="enc_in")
-    encoder_inputs = tf.unpack(encoder_inputs, axis=1)
+    encoder_inputs = tf.unstack(encoder_inputs, axis=1)
     decoder_inputs = tf.slice(network, [0, max_seq_len], [-1, max_seq_len], name="dec_in")
-    decoder_inputs = tf.unpack(decoder_inputs, axis=1)
+    decoder_inputs = tf.unstack(decoder_inputs, axis=1)
     go_input = tf.mul( tf.ones_like(decoder_inputs[0], dtype=tf.int32), GO_VALUE )
     decoder_inputs = [go_input] + decoder_inputs[: max_max_seq_len-1]
     num_encoder_symbols = max_word_id + 1 # 从0起始
@@ -91,7 +94,7 @@ def create_model(max_word_id, is_test=False):
             embedding_size=max_word_id,
             feed_previous=is_test)
 
-    network = tf.pack(model_outputs, axis=1)
+    network = tf.stack(model_outputs, axis=1)
 
 
 
@@ -107,9 +110,9 @@ def create_model(max_word_id, is_test=False):
             metric=accuracy,
             name="Y")
 
-    print "begin create DNN model"
+    print ("begin create DNN model")
     model = tflearn.DNN(network, tensorboard_verbose=0, checkpoint_path=None)
-    print "create DNN model finish"
+    print ("create DNN model finish")
     return model
 
 def print_sentence(list, msg):
@@ -125,7 +128,7 @@ if __name__ == '__main__':
     else:
         is_test = False
     (word_id_dict, max_word_id) = init_word_id_dict()
-    print "max_word_id =", max_word_id
+    print ("max_word_id =", max_word_id)
 
     model = create_model(max_word_id, is_test)
 
